@@ -1,0 +1,31 @@
+name: daily-referral-crawl
+on:
+  schedule:
+    - cron: "0 5 * * *"   # every day, 05:00 UTC (07:00 Paris in summer, 06:00 in winter)
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: crawl both platforms and build the hot report
+        run: python3 mercor_crawl.py && python3 micro1_crawl.py && python3 hot_tracker.py
+      - name: publish to WordPress (skipped until the three secrets exist)
+        continue-on-error: true
+        env:
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: python3 wp_publish.py
+      - name: commit snapshots
+        run: |
+          git config user.name "crawler"
+          git config user.email "crawler@users.noreply.github.com"
+          git add snapshots
+          git commit -m "snapshots $(date -u +%F)" || echo "nothing new"
+          git push
